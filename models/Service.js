@@ -4,29 +4,37 @@ const serviceSchema = new Schema({
   name: {
     type: String,
     required: true,
-    unique: true
+    unique: true,
+    trim: true,
   },
   description: {
     type: String,
-    required: true
+    required: true,
+    trim: true,
   },
-  category: { // Nueva categoría para clasificar servicios
+  category: {
     type: String,
     enum: ['Aplicaciones Administrativas', 'Aplicaciones Tiendas', 'Cambios', 'CLA', 'Equipos & Periféricos', 'General'],
-    required: true
+    required: true,
   },
   sla: {
-    responseTime: { type: Number, required: true }, // En horas
-    resolutionTime: { type: Number, required: true } // En horas
+    responseTime: {
+      type: Number,
+      required: true, // En horas
+    },
+    resolutionTime: {
+      type: Number,
+      required: true, // En horas
+    },
   },
-  popularity: { // Contador de solicitudes
+  popularity: {
     type: Number,
-    default: 0
+    default: 0,
   },
   active: {
     type: Boolean,
-    default: true
-  }
+    default: true,
+  },
 }, { timestamps: true });
 
 export default model('Service', serviceSchema);

@@ -9,16 +9,23 @@ const router = express.Router();
 // Crear un ticket
 router.post('/', authMiddleware, async (req, res) => {
   const {
-    title, description, serviceId, priority, phone, email, organization, impact, urgency,
+    title, description, service, serviceId, priority, phone, email, organization, impact, urgency,
     severity, additionalInfo, contact, teamviewer, provider, system, relatedTickets
   } = req.body;
 
   try {
-    const service = await Service.findById(serviceId);
-    if (!service) return res.status(400).json({ msg: 'Servicio no encontrado' });
+    const serviceToUse = service || serviceId;
+    if (!serviceToUse) {
+      return res.status(400).json({ msg: 'El ID del servicio es requerido' });
+    }
+
+    const serviceDoc = await Service.findById(serviceToUse);
+    if (!serviceDoc) {
+      return res.status(400).json({ msg: 'Servicio no encontrado' });
+    }
 
     const slaDeadline = new Date();
-    slaDeadline.setHours(slaDeadline.getHours() + service.sla.resolutionTime);
+    slaDeadline.setHours(slaDeadline.getHours() + serviceDoc.sla.resolutionTime);
 
     let assignedTo = null;
     if (!req.body.assignedTo) {
@@ -30,11 +37,8 @@ router.post('/', authMiddleware, async (req, res) => {
               assignedTo: tech._id,
               status: { $nin: ['resuelto', 'cerrado'] },
             });
-            const categoryMatch = (
-              (service.category === 'Aplicaciones Tiendas' && tech.name === 'Juan Pérez') ||
-              (service.category === 'Equipos & Periféricos' && tech.name === 'María Gómez') ||
-              (service.category === 'Aplicaciones Administrativas' && tech.name === 'Carlos López')
-            ) ? 1 : 0;
+            const specialties = tech.specialties || [];
+            const categoryMatch = specialties.includes(serviceDoc.category) ? 1 : 0;
             return {
               tech,
               score: (1 / (activeTickets + 1)) + categoryMatch,
@@ -45,7 +49,7 @@ router.post('/', authMiddleware, async (req, res) => {
           current.score > max.score ? current : max
         );
         assignedTo = bestTech.tech._id;
-        console.log(`Asignado a: ${bestTech.tech.name} con puntaje ${bestTech.score}`);
+        console.log(`Asignado a: ${bestTech.tech.name} con puntaje ${bestTech.score} (Categoría: ${serviceDoc.category})`);
       }
     }
 
@@ -54,7 +58,7 @@ router.post('/', authMiddleware, async (req, res) => {
       ticketId,
       title,
       description,
-      service: serviceId,
+      service: serviceToUse,
       priority: priority || 'media',
       createdBy: req.user.userId,
       assignedTo,
@@ -73,8 +77,8 @@ router.post('/', authMiddleware, async (req, res) => {
       relatedTickets: relatedTickets || [],
     });
 
-    service.popularity += 1;
-    await service.save();
+    serviceDoc.popularity += 1;
+    await serviceDoc.save();
     await ticket.save();
 
     if (relatedTickets?.length > 0) {
@@ -91,15 +95,15 @@ router.post('/', authMiddleware, async (req, res) => {
     res.status(201).json(populatedTicket);
   } catch (err) {
     console.error('Error al crear ticket:', err.message);
-    res.status(500).json({ msg: 'Error en el servidor', error: err.message });
+    res.status(500).json({ msg: 'Error en el servidor', error: process.env.NODE_ENV === 'development' ? err.message : undefined });
   }
 });
 
-// Obtener todos los tickets (paginado)
+// Obtener todos los tickets
 router.get('/', authMiddleware, async (req, res) => {
-  const page = parseInt(req.query.page) || 1;
-  const limit = parseInt(req.query.limit) || 10;
   try {
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
     const tickets = await Ticket.find()
       .populate('service', 'name')
       .populate('createdBy', 'name')
@@ -115,11 +119,11 @@ router.get('/', authMiddleware, async (req, res) => {
     });
   } catch (err) {
     console.error('Error al obtener tickets:', err.message);
-    res.status(500).json({ msg: 'Error en el servidor' });
+    res.status(500).json({ msg: 'Error en el servidor', error: process.env.NODE_ENV === 'development' ? err.message : undefined });
   }
 });
 
-// Obtener mis tickets
+// Obtener mis tickets creados
 router.get('/my-tickets', authMiddleware, async (req, res) => {
   try {
     const tickets = await Ticket.find({ createdBy: req.user.userId })
@@ -129,11 +133,11 @@ router.get('/my-tickets', authMiddleware, async (req, res) => {
     res.json(tickets);
   } catch (err) {
     console.error('Error al obtener mis tickets:', err.message);
-    res.status(500).json({ msg: 'Error en el servidor' });
+    res.status(500).json({ msg: 'Error en el servidor', error: process.env.NODE_ENV === 'development' ? err.message : undefined });
   }
 });
 
-// Obtener tickets asignados al usuario
+// Obtener tickets asignados a mí
 router.get('/my-assigned', authMiddleware, async (req, res) => {
   try {
     const tickets = await Ticket.find({ assignedTo: req.user.userId })
@@ -143,7 +147,7 @@ router.get('/my-assigned', authMiddleware, async (req, res) => {
     res.json(tickets);
   } catch (err) {
     console.error('Error al obtener tickets asignados:', err.message);
-    res.status(500).json({ msg: 'Error en el servidor' });
+    res.status(500).json({ msg: 'Error en el servidor', error: process.env.NODE_ENV === 'development' ? err.message : undefined });
   }
 });
 
@@ -154,11 +158,13 @@ router.get('/:id', authMiddleware, async (req, res) => {
       .populate('service', 'name')
       .populate('createdBy', 'name')
       .populate('assignedTo', 'name');
-    if (!ticket) return res.status(404).json({ msg: 'Ticket no encontrado' });
+    if (!ticket) {
+      return res.status(404).json({ msg: 'Ticket no encontrado' });
+    }
     res.json(ticket);
   } catch (err) {
     console.error('Error al obtener ticket por ID:', err.message);
-    res.status(500).json({ msg: 'Error en el servidor' });
+    res.status(500).json({ msg: 'Error en el servidor', error: process.env.NODE_ENV === 'development' ? err.message : undefined });
   }
 });
 
@@ -171,7 +177,9 @@ router.put('/:id', authMiddleware, async (req, res) => {
 
   try {
     const ticket = await Ticket.findById(req.params.id);
-    if (!ticket) return res.status(404).json({ msg: 'Ticket no encontrado' });
+    if (!ticket) {
+      return res.status(404).json({ msg: 'Ticket no encontrado' });
+    }
 
     if (req.user.role !== 'admin' && ticket.createdBy.toString() !== req.user.userId && ticket.assignedTo?.toString() !== req.user.userId) {
       return res.status(403).json({ msg: 'No autorizado' });
@@ -212,17 +220,19 @@ router.put('/:id', authMiddleware, async (req, res) => {
     res.json(populatedTicket);
   } catch (err) {
     console.error('Error al actualizar ticket:', err.message);
-    res.status(500).json({ msg: 'Error en el servidor' });
+    res.status(500).json({ msg: 'Error en el servidor', error: process.env.NODE_ENV === 'development' ? err.message : undefined });
   }
 });
 
-// Agregar registro de trabajo
+// Agregar un worklog a un ticket
 router.post('/:id/worklog', authMiddleware, async (req, res) => {
   const { type, timeSpent, workDate, contact, solution, cause, resolution, additionalAnalysts } = req.body;
 
   try {
     const ticket = await Ticket.findById(req.params.id);
-    if (!ticket) return res.status(404).json({ msg: 'Ticket no encontrado' });
+    if (!ticket) {
+      return res.status(404).json({ msg: 'Ticket no encontrado' });
+    }
 
     const isCreator = ticket.createdBy.toString() === req.user.userId;
     const isAssigned = ticket.assignedTo?.toString() === req.user.userId;
@@ -250,18 +260,18 @@ router.post('/:id/worklog', authMiddleware, async (req, res) => {
     res.json(populatedTicket);
   } catch (err) {
     console.error('Error al agregar worklog:', err.message);
-    res.status(500).json({ msg: 'Error en el servidor' });
+    res.status(500).json({ msg: 'Error en el servidor', error: process.env.NODE_ENV === 'development' ? err.message : undefined });
   }
 });
 
-// Obtener catálogo de servicios
+// Obtener servicios
 router.get('/services', authMiddleware, async (req, res) => {
   try {
     const services = await Service.find();
     res.json(services);
   } catch (err) {
     console.error('Error al obtener servicios:', err.message);
-    res.status(500).json({ msg: 'Error en el servidor' });
+    res.status(500).json({ msg: 'Error en el servidor', error: process.env.NODE_ENV === 'development' ? err.message : undefined });
   }
 });
 
