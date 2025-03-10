@@ -27,7 +27,7 @@ const userSchema = new Schema({
     type: String,
     default: null,
   },
-  specialties: [{ // Campo para especialidades
+  specialties: [{
     type: String,
     default: [],
   }],

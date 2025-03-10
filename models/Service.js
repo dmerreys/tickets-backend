@@ -20,11 +20,11 @@ const serviceSchema = new Schema({
   sla: {
     responseTime: {
       type: Number,
-      required: true, // En horas
+      required: true, 
     },
     resolutionTime: {
       type: Number,
-      required: true, // En horas
+      required: true,
     },
   },
   popularity: {

@@ -4,13 +4,13 @@ import authMiddleware from '../middleware/auth.js';
 
 const router = express.Router();
 
-// Precargar servicios (solo admin)
+// Precargar servicios
 router.post('/preload', authMiddleware, async (req, res) => {
   try {
     if (req.user.role !== 'admin') {
       return res.status(403).json({ msg: 'No autorizado' });
     }
-
+    //servicios mesa gpf
     const services = [
       { name: 'Entrada DNS Público', category: 'Aplicaciones Administrativas', description: 'Configuración o fallo en entradas DNS públicas.', sla: { responseTime: 1, resolutionTime: 4 }, popularity: 60 },
       { name: 'Falla Descarga Orden - OMS', category: 'Aplicaciones Administrativas', description: 'Error al descargar órdenes en el sistema OMS.', sla: { responseTime: 2, resolutionTime: 6 }, popularity: 70 },

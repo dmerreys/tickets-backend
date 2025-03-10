@@ -6,7 +6,6 @@ import authMiddleware from '../middleware/auth.js';
 
 const router = express.Router();
 
-// Crear un ticket
 router.post('/', authMiddleware, async (req, res) => {
   const {
     title, description, service, serviceId, priority, phone, email, organization, impact, urgency,
@@ -99,23 +98,51 @@ router.post('/', authMiddleware, async (req, res) => {
   }
 });
 
-// Obtener todos los tickets
 router.get('/', authMiddleware, async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
-    const tickets = await Ticket.find()
+    const sort = req.query.sort || '-createdAt';
+    const status = req.query.status;
+    const urgency = req.query.urgency;
+    const assignedTo = req.query.assignedTo;
+    const excludeStatus = req.query.excludeStatus;
+
+    const query = {};
+    if (status) query.status = status;
+    if (urgency) query.urgency = urgency;
+    if (assignedTo === 'null') {
+      query.assignedTo = null;
+    } else if (assignedTo) {
+      const user = await User.findOne({ name: assignedTo });
+      if (user) query.assignedTo = user._id;
+      else return res.status(400).json({ msg: 'Técnico no encontrado' });
+    }
+    if (excludeStatus) query.status = { $ne: excludeStatus };
+
+    const sortOptions = {};
+    if (sort === 'createdAt') sortOptions.createdAt = 1;
+    else if (sort === '-createdAt') sortOptions.createdAt = -1;
+
+    const tickets = await Ticket.find(query)
       .populate('service', 'name')
       .populate('createdBy', 'name')
       .populate('assignedTo', 'name')
+      .sort(sortOptions)
       .skip((page - 1) * limit)
       .limit(limit);
-    const totalTickets = await Ticket.countDocuments();
+
+    const totalTickets = await Ticket.countDocuments(query);
+    const slaBreachedCount = await Ticket.countDocuments({ ...query, slaBreached: true });
+    const slaCompliantCount = totalTickets - slaBreachedCount;
+
     res.json({
       tickets,
       currentPage: page,
       totalPages: Math.ceil(totalTickets / limit),
       totalTickets,
+      slaBreachedCount,
+      slaCompliantCount,
     });
   } catch (err) {
     console.error('Error al obtener tickets:', err.message);
@@ -123,7 +150,6 @@ router.get('/', authMiddleware, async (req, res) => {
   }
 });
 
-// Obtener mis tickets creados
 router.get('/my-tickets', authMiddleware, async (req, res) => {
   try {
     const tickets = await Ticket.find({ createdBy: req.user.userId })
@@ -137,7 +163,6 @@ router.get('/my-tickets', authMiddleware, async (req, res) => {
   }
 });
 
-// Obtener tickets asignados a mí
 router.get('/my-assigned', authMiddleware, async (req, res) => {
   try {
     const tickets = await Ticket.find({ assignedTo: req.user.userId })
@@ -151,7 +176,6 @@ router.get('/my-assigned', authMiddleware, async (req, res) => {
   }
 });
 
-// Obtener un ticket por ID
 router.get('/:id', authMiddleware, async (req, res) => {
   try {
     const ticket = await Ticket.findById(req.params.id)
@@ -168,7 +192,6 @@ router.get('/:id', authMiddleware, async (req, res) => {
   }
 });
 
-// Actualizar un ticket
 router.put('/:id', authMiddleware, async (req, res) => {
   const {
     title, description, priority, status, assignedTo, phone, email, organization,
@@ -224,7 +247,6 @@ router.put('/:id', authMiddleware, async (req, res) => {
   }
 });
 
-// Agregar un worklog a un ticket
 router.post('/:id/worklog', authMiddleware, async (req, res) => {
   const { type, timeSpent, workDate, contact, solution, cause, resolution, additionalAnalysts } = req.body;
 
@@ -264,7 +286,6 @@ router.post('/:id/worklog', authMiddleware, async (req, res) => {
   }
 });
 
-// Obtener servicios
 router.get('/services', authMiddleware, async (req, res) => {
   try {
     const services = await Service.find();

@@ -3,12 +3,12 @@ import { Schema, model } from 'mongoose';
 const worklogSchema = new Schema({
   type: {
     type: String,
-    enum: ['Resuelto', 'Trabajo', 'Primer Contacto', 'Nota del Cliente', 'Actualizar'],
+    enum: ['Resuelto', 'Trabajo', 'Primer Contacto', 'Nota del Cliente', 'Actualizar', 'Cerrado'],
     required: true,
   },
   timeSpent: {
     type: Number,
-    required: true, // En minutos
+    required: true, 
   },
   workDate: {
     type: Date,
@@ -121,7 +121,7 @@ const ticketSchema = new Schema({
   },
   worklog: [worklogSchema],
   relatedTickets: [{
-    type: String, // Cambiado a String para usar ticketId
+    type: String, 
   }],
 }, { timestamps: true });
 
